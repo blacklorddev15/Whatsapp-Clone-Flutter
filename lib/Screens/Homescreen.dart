@@ -1,5 +1,4 @@
 import 'package:varnox_app/Model/ChatModel.dart';
-import 'package:varnox_app/Pages/CameraPage.dart';
 import 'package:varnox_app/Pages/ChatPage.dart';
 import 'package:flutter/material.dart';
 
@@ -80,13 +79,41 @@ class _HomescreenState extends State<Homescreen>
       body: TabBarView(
         controller: _controller,
         children: [
-          CameraPage(),
+          _CameraTabUnavailable(),
           ChatPage(
             chatmodels: widget.chatmodels,
             sourchat: widget.sourchat,
           ),
           Text("STATUS"),
           Text("Calls"),
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder for the camera tab.
+///
+/// The real tab is Pages/CameraPage.dart -> Screens/CameraScreen.dart, which pulls in
+/// Screens/CameraView.dart and Screens/VideoView.dart. Both of those import dart:io and use
+/// File(), and dart:io cannot be compiled for web — referencing them at all fails the web
+/// build. They are left untouched in the repository; this tab simply does not import them, so
+/// a web build never reaches dart:io. Restore CameraPage() here for mobile builds.
+class _CameraTabUnavailable extends StatelessWidget {
+  const _CameraTabUnavailable();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.camera_alt, size: 48, color: Colors.grey),
+          SizedBox(height: 12),
+          Text(
+            "Camera is not available in this build",
+            style: TextStyle(color: Colors.grey),
+          ),
         ],
       ),
     );

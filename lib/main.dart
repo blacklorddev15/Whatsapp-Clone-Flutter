@@ -1,14 +1,13 @@
-import 'package:camera/camera.dart';
-import 'package:varnox_app/Screens/CameraScreen.dart';
 import 'package:varnox_app/Screens/Homescreen.dart';
 import 'package:varnox_app/Screens/LoginScreen.dart';
 import 'package:flutter/material.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  cameras = await availableCameras();
-
+  // The camera plugin has no web implementation, so enumerating devices here threw before
+  // runApp and the web build rendered a blank page. Nothing needs the device list at startup
+  // now that the camera screen is outside the web build — see Homescreen for the tab.
   runApp(MyApp());
 }
 
