@@ -1,4 +1,4 @@
-package com.example.chatapp
+package tech.blacklord.varnox.chat
 
 import io.flutter.embedding.android.FlutterActivity
 

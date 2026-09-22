@@ -1,6 +1,6 @@
 {
-    "name": "chatapp",
-    "short_name": "chatapp",
+    "name": "Varnox App",
+    "short_name": "Varnox",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

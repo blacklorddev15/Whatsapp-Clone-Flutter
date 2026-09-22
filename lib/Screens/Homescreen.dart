@@ -1,6 +1,6 @@
-import 'package:chatapp/Model/ChatModel.dart';
-import 'package:chatapp/Pages/CameraPage.dart';
-import 'package:chatapp/Pages/ChatPage.dart';
+import 'package:varnox_app/Model/ChatModel.dart';
+import 'package:varnox_app/Pages/CameraPage.dart';
+import 'package:varnox_app/Pages/ChatPage.dart';
 import 'package:flutter/material.dart';
 
 class Homescreen extends StatefulWidget {

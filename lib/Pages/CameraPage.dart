@@ -1,4 +1,4 @@
-import 'package:chatapp/Screens/CameraScreen.dart';
+import 'package:varnox_app/Screens/CameraScreen.dart';
 import 'package:flutter/material.dart';
 
 class CameraPage extends StatelessWidget {

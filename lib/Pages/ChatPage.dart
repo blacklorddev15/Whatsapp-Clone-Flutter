@@ -1,6 +1,6 @@
-import 'package:chatapp/CustomUI/CustomCard.dart';
-import 'package:chatapp/Model/ChatModel.dart';
-import 'package:chatapp/Screens/SelectContact.dart';
+import 'package:varnox_app/CustomUI/CustomCard.dart';
+import 'package:varnox_app/Model/ChatModel.dart';
+import 'package:varnox_app/Screens/SelectContact.dart';
 import 'package:flutter/material.dart';
 
 class ChatPage extends StatefulWidget {

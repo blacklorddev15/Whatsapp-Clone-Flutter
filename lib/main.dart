@@ -1,7 +1,7 @@
 import 'package:camera/camera.dart';
-import 'package:chatapp/Screens/CameraScreen.dart';
-import 'package:chatapp/Screens/Homescreen.dart';
-import 'package:chatapp/Screens/LoginScreen.dart';
+import 'package:varnox_app/Screens/CameraScreen.dart';
+import 'package:varnox_app/Screens/Homescreen.dart';
+import 'package:varnox_app/Screens/LoginScreen.dart';
 import 'package:flutter/material.dart';
 
 Future<void> main() async {

@@ -1,6 +1,6 @@
-import 'package:chatapp/CustomUI/ButtonCard.dart';
-import 'package:chatapp/Model/ChatModel.dart';
-import 'package:chatapp/Screens/Homescreen.dart';
+import 'package:varnox_app/CustomUI/ButtonCard.dart';
+import 'package:varnox_app/Model/ChatModel.dart';
+import 'package:varnox_app/Screens/Homescreen.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
