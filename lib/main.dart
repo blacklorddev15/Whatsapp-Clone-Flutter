@@ -79,7 +79,15 @@ class _RootState extends State<Root> {
   Widget build(BuildContext context) {
     if (checking) return splash();
     if (signedIn) {
-      return Homescreen(chatmodels: placeholderChats(), sourchat: selfChat(user));
+      return Homescreen(
+        chatmodels: placeholderChats(),
+        sourchat: selfChat(user),
+        user: user,
+        onSignedOut: () => setState(() {
+          user = null;
+          signedIn = false;
+        }),
+      );
     }
     return AuthScreen(
       onSignedIn: (newUser) => setState(() {

@@ -166,4 +166,51 @@ class Api {
     final data = await _post("/messages", {"conversationId": conversationId, "text": text});
     return data is Map ? data : <String, dynamic>{};
   }
+
+  // ---------------------------------------------------------------- status
+
+  /// Every unexpired status, newest first, with the author populated to { username, profilePicture }.
+  static Future<List> statuses() async {
+    final data = await _get("/statuses");
+    if (data is Map && data["statuses"] is List) return data["statuses"];
+    return <dynamic>[];
+  }
+
+  /// Posts a text status. The server stamps a 24-hour expiry; media statuses are not sent yet.
+  static Future<Map> createStatus(String text) async {
+    final data = await _post("/statuses", {"text": text, "contentType": "text"});
+    return data is Map ? data : <String, dynamic>{};
+  }
+
+  /// Records that this account has seen the status. Without this the green unread ring stays.
+  static Future<void> viewStatus(String statusId) async {
+    await _post("/statuses/$statusId/view", <String, dynamic>{});
+  }
+
+  // ---------------------------------------------------------------- settings
+
+  /// The privacy document; the endpoint upserts, so defaults exist on first read.
+  static Future<Map> privacy() async {
+    final data = await _get("/privacy");
+    if (data is Map && data["settings"] is Map) return data["settings"];
+    return <String, dynamic>{};
+  }
+
+  /// Sends only the changed keys; the server ignores anything outside its allowed list.
+  static Future<Map> updatePrivacy(Map changes) async {
+    final response = await http.patch(
+      Uri.parse("$baseUrl/privacy"),
+      headers: _headers(),
+      body: jsonEncode(changes),
+    );
+    final data = _unwrap(response);
+    if (data is Map && data["settings"] is Map) return data["settings"];
+    return <String, dynamic>{};
+  }
+
+  static Future<List> devices() async {
+    final data = await _get("/devices");
+    if (data is Map && data["devices"] is List) return data["devices"];
+    return <dynamic>[];
+  }
 }

@@ -1,11 +1,20 @@
 import 'package:varnox_app/Model/ChatModel.dart';
 import 'package:varnox_app/Pages/ChatPage.dart';
+import 'package:varnox_app/Screens/SettingsPage.dart';
+import 'package:varnox_app/Screens/StatusPage.dart';
 import 'package:flutter/material.dart';
 
 class Homescreen extends StatefulWidget {
-  Homescreen({Key key, this.chatmodels, this.sourchat}) : super(key: key);
+  Homescreen({Key key, this.chatmodels, this.sourchat, this.user, this.onSignedOut})
+      : super(key: key);
   final List<ChatModel> chatmodels;
   final ChatModel sourchat;
+
+  /// The authenticated account, handed to the Status and Settings screens.
+  final Map user;
+
+  /// Called after the account signs out, so the root can return to the sign-in screen.
+  final Function onSignedOut;
 
   @override
   _HomescreenState createState() => _HomescreenState();
@@ -24,13 +33,11 @@ class _HomescreenState extends State<Homescreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Whatsapp Clone"),
+        title: Text("Varnox"),
         actions: [
           IconButton(icon: Icon(Icons.search), onPressed: () {}),
           PopupMenuButton<String>(
-            onSelected: (value) {
-              print(value);
-            },
+            onSelected: openMenu,
             itemBuilder: (BuildContext contesxt) {
               return [
                 PopupMenuItem(
@@ -40,10 +47,6 @@ class _HomescreenState extends State<Homescreen>
                 PopupMenuItem(
                   child: Text("New broadcast"),
                   value: "New broadcast",
-                ),
-                PopupMenuItem(
-                  child: Text("Whatsapp Web"),
-                  value: "Whatsapp Web",
                 ),
                 PopupMenuItem(
                   child: Text("Starred messages"),
@@ -84,9 +87,58 @@ class _HomescreenState extends State<Homescreen>
             chatmodels: widget.chatmodels,
             sourchat: widget.sourchat,
           ),
-          Text("STATUS"),
-          Text("Calls"),
+          StatusPage(user: widget.user),
+          _CallsTabUnavailable(),
         ],
+      ),
+    );
+  }
+
+  void openMenu(String value) {
+    if (value == "Settings") {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SettingsPage(user: widget.user, onSignedOut: widget.onSignedOut),
+        ),
+      );
+      return;
+    }
+    // The remaining entries have no endpoint behind them yet. Saying so beats the previous
+    // behaviour, which was to print the label to the console and do nothing.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("$value is not implemented yet.")),
+    );
+  }
+}
+
+/// Placeholder for the Calls tab.
+///
+/// The API has no call-history endpoint — the React client keeps its call log in browser storage —
+/// so there is nothing to read here yet. Call signalling does exist over the socket, which is a
+/// separate piece of work.
+class _CallsTabUnavailable extends StatelessWidget {
+  const _CallsTabUnavailable();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 36),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.call, size: 48, color: Colors.grey),
+            SizedBox(height: 12),
+            Text("No calls yet", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+            SizedBox(height: 6),
+            Text(
+              "Call history is not stored by the API yet, so this tab stays empty.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 12.5),
+            ),
+          ],
+        ),
       ),
     );
   }
