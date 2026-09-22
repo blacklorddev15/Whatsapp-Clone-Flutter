@@ -33,7 +33,13 @@ dependencies:
   camera: ^0.7.0+2
   path_provider: ^1.6.22
   path:
-  video_player: ^1.0.1
+  # Pinned exactly, not ^1.0.1. The caret lets pub pick a later 1.x, which drags in
+  # video_player_platform_interface 2.x — that version calls BasicMessageChannel
+  # .setMockMessageHandler, which this project's Flutter 2.x SDK does not have, so the web
+  # compile fails inside a package the app never imports. Flutter's generated web plugin
+  # registrant imports every plugin's web implementation whether or not app code uses it, so
+  # an unused dependency still has to resolve compatibly.
+  video_player: 1.0.1
   socket_io_client: ^0.9.12
 dev_dependencies:
   flutter_test:
