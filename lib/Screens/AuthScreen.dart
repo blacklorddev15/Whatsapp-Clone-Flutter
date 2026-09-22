@@ -15,7 +15,9 @@ import '../Services/api.dart';
 class AuthScreen extends StatefulWidget {
   AuthScreen({Key key, this.onSignedIn}) : super(key: key);
 
-  final VoidCallback onSignedIn;
+  /// Called with the user document returned by /auth/login/email or /auth/verify-email, so the
+  /// dashboard can greet the account that just signed in without a second round trip.
+  final Function onSignedIn;
 
   @override
   _AuthScreenState createState() => _AuthScreenState();
@@ -86,8 +88,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> signIn() => run(() async {
         if (!validateCredentials()) return;
-        await Api.login(email, passwordController.text);
-        widget.onSignedIn();
+        final data = await Api.login(email, passwordController.text);
+        widget.onSignedIn(data["user"]);
       });
 
   Future<void> verifyCode() => run(() async {
@@ -96,8 +98,8 @@ class _AuthScreenState extends State<AuthScreen> {
           setState(() => error = "Enter the code from the email.");
           return;
         }
-        await Api.verifyEmail(email, code);
-        widget.onSignedIn();
+        final data = await Api.verifyEmail(email, code);
+        widget.onSignedIn(data["user"]);
       });
 
   Future<void> resendCode() => run(() async {

@@ -1,5 +1,6 @@
+import 'package:varnox_app/Model/ChatModel.dart';
 import 'package:varnox_app/Screens/AuthScreen.dart';
-import 'package:varnox_app/Screens/LoginScreen.dart';
+import 'package:varnox_app/Screens/Homescreen.dart';
 import 'package:varnox_app/Services/api.dart';
 import 'package:flutter/material.dart';
 
@@ -25,11 +26,17 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Chooses between the sign-in screen and the chat list on launch.
+/// Chooses between the auth screen and the dashboard on launch.
 ///
 /// A stored token is treated as a hint rather than proof: it is validated against
-/// /auth/check-auth before the chat list appears, so an expired or revoked session lands on the
-/// sign-in screen instead of a screen whose every request would immediately 401.
+/// /auth/check-auth before the dashboard appears, so an expired or revoked session lands on the
+/// sign-in screen instead of a dashboard whose every request would immediately 401.
+///
+/// Signing in goes straight to the dashboard. The original demo inserted a contact-picker screen
+/// here (Screens/LoginScreen.dart) whose only job was to choose which fake identity you wanted to
+/// be — it removed the chosen entry from a hardcoded list and pushed the dashboard with it. Real
+/// accounts make that step meaningless, so it is no longer in the flow. The file is left in the
+/// repository but is unreferenced.
 class Root extends StatefulWidget {
   @override
   _RootState createState() => _RootState();
@@ -38,6 +45,7 @@ class Root extends StatefulWidget {
 class _RootState extends State<Root> {
   bool checking = true;
   bool signedIn = false;
+  Map user;
 
   @override
   void initState() {
@@ -47,10 +55,12 @@ class _RootState extends State<Root> {
 
   Future<void> restoreSession() async {
     bool valid = false;
+    Map signedInUser;
     await Api.loadToken();
     if (Api.hasToken) {
       try {
-        await Api.checkAuth();
+        final data = await Api.checkAuth();
+        signedInUser = data["user"] is Map ? data["user"] : data;
         valid = true;
       } catch (_) {
         // Expired or revoked. Falls through to the sign-in screen.
@@ -59,6 +69,7 @@ class _RootState extends State<Root> {
     }
     if (!mounted) return;
     setState(() {
+      user = signedInUser;
       signedIn = valid;
       checking = false;
     });
@@ -67,8 +78,38 @@ class _RootState extends State<Root> {
   @override
   Widget build(BuildContext context) {
     if (checking) return splash();
-    if (signedIn) return LoginScreen();
-    return AuthScreen(onSignedIn: () => setState(() => signedIn = true));
+    if (signedIn) {
+      return Homescreen(chatmodels: placeholderChats(), sourchat: selfChat(user));
+    }
+    return AuthScreen(
+      onSignedIn: (newUser) => setState(() {
+        user = newUser is Map ? newUser : null;
+        signedIn = true;
+      }),
+    );
+  }
+
+  /// The dashboard takes the signed-in account as `sourchat`, which is what outgoing messages are
+  /// attributed to.
+  ChatModel selfChat(Map account) {
+    return ChatModel(
+      name: displayName(account),
+      icon: "person.svg",
+      isGroup: false,
+      time: "",
+      currentMessage: "",
+      status: "online",
+      id: 0,
+    );
+  }
+
+  String displayName(Map account) {
+    if (account == null) return "You";
+    final username = account["username"];
+    if (username is String && username.isNotEmpty) return username;
+    final email = account["email"];
+    if (email is String && email.contains("@")) return email.split("@").first;
+    return "You";
   }
 
   Widget splash() {
@@ -96,4 +137,19 @@ class _RootState extends State<Root> {
       ),
     );
   }
+}
+
+/// Placeholder conversations for the dashboard's chat list.
+///
+/// These are the four demo entries that used to live in Screens/LoginScreen.dart. The real list
+/// is GET /conversations, already reachable from Services/api.dart — mapping a conversation
+/// document (participants, lastMessage, timestamps) onto ChatModel is the next piece of work, and
+/// until then the dashboard would otherwise open completely empty.
+List<ChatModel> placeholderChats() {
+  return [
+    ChatModel(name: "Dev Stack", isGroup: false, currentMessage: "Hi Everyone", time: "4:00", icon: "person.svg", id: 1),
+    ChatModel(name: "Kishor", isGroup: false, currentMessage: "Hi Kishor", time: "13:00", icon: "person.svg", id: 2),
+    ChatModel(name: "Collins", isGroup: false, currentMessage: "Hi Dev Stack", time: "8:00", icon: "person.svg", id: 3),
+    ChatModel(name: "Balram Rathore", isGroup: false, currentMessage: "Hi Dev Stack", time: "2:00", icon: "person.svg", id: 4),
+  ];
 }
