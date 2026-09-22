@@ -33,13 +33,18 @@ dependencies:
   camera: ^0.7.0+2
   path_provider: ^1.6.22
   path:
-  # Pinned exactly, not ^1.0.1. The caret lets pub pick a later 1.x, which drags in
-  # video_player_platform_interface 2.x — that version calls BasicMessageChannel
-  # .setMockMessageHandler, which this project's Flutter 2.x SDK does not have, so the web
-  # compile fails inside a package the app never imports. Flutter's generated web plugin
-  # registrant imports every plugin's web implementation whether or not app code uses it, so
-  # an unused dependency still has to resolve compatibly.
-  video_player: 1.0.1
+  # video_player is deliberately absent.
+  #
+  # The committed pubspec.lock pinned its transitive video_player_platform_interface to 2.2.0,
+  # which calls BasicMessageChannel.setMockMessageHandler — an API this project's Flutter 2.x
+  # SDK does not have, so the web compile failed inside that package even though no app code
+  # imports it. Flutter's generated web plugin registrant imports every plugin's web
+  # implementation whether or not app code uses it, so an unused plugin still has to resolve to
+  # something the SDK can compile.
+  #
+  # Its only consumer, Screens/VideoView.dart, is unreachable from main.dart and imports
+  # dart:io anyway, so it cannot be part of a web build. Re-add `video_player: 1.0.1` here if
+  # you restore mobile video playback.
   socket_io_client: ^0.9.12
 dev_dependencies:
   flutter_test:
