@@ -20,17 +20,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Two SDK versions. 2.5.3 is the one expected to build as the project stands: it only warns
-        # about the v1 Android embedding, where 2.10.5 and later turn it into a hard error. 2.10.5
-        # is built as well because the committed pubspec.lock pins video_player_platform_interface
-        # 2.2.0, which calls BasicMessageChannel.setMockMessageHandler — an API that only exists from
-        # Flutter 2.10 — so if 2.5.3 trips over that package, 2.10.5 can still get through, given the
-        # --ignore-deprecation its own error message points at.
+        # The committed pubspec.lock was resolved for Dart 2.12 and pulls in win32 1.7.4 and ffi 0.1.3.
+        # Both declare `sdk: <3.0.0`, so pub resolves them on any Dart 2.x — but the compiler rejects
+        # them from Dart 2.13 onward ("Struct 'STATSTG' is empty", "Expected type 'T' to be a valid and
+        # instantiated subtype of 'NativeType'"). Flutter 2.5.3 (Dart 2.14) and 2.10.5 (Dart 2.16) both
+        # fail on exactly that, so the SDK has to be old enough to still accept those packages.
+        #
+        # 2.0.6 ships Dart 2.12.4, the version the lock was written against, and is the expected match.
+        # 2.2.3 (Dart 2.13.4) is built alongside it to bracket whether the restriction arrived in 2.13
+        # or 2.14.
         include:
-          - flutter: "2.5.3"
+          - flutter: "2.0.6"
             extra_args: ""
-          - flutter: "2.10.5"
-            extra_args: "--ignore-deprecation"
+          - flutter: "2.2.3"
+            extra_args: ""
     name: flutter ${{ matrix.flutter }}
     steps:
       - name: Check out the original app, unmodified
