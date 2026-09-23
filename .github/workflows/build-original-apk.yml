@@ -2,10 +2,22 @@ name: Build original APK
 
 # Builds an installable APK from DevStack06/Whatsapp-Clone-Flutter exactly as published.
 #
-# The app source is checked out from that repository and nothing in it is modified — no pubspec
-# edit, no manifest edit, no dependency change. This workflow exists only to supply a toolchain:
-# the project pins AGP 3.5.0 / Gradle 5.6.2 (2021), which will not run on a modern JDK, and no
-# Flutter or Android SDK is installed on the machine the request came from.
+# Nothing in the app source is modified: no pubspec edit, no manifest edit, no dependency bump. The
+# repository is checked out from upstream and built as-is. Every fix below is environment-side, in
+# the CI runner, because a 2021 project no longer builds on a current toolchain:
+#
+#   1. AGP 3.5.0 + Gradle 5.6.2 will not run on JDK 17+, so the build uses JDK 8.
+#   2. video_player 1.0.1 needs com.google.android.exoplayer:*:2.12.1, which only ever existed on
+#      JCenter. That repository is gone (Google Maven starts at 2.13.3, Maven Central never had it),
+#      so Aliyun's JCenter mirror is injected via a Gradle init script rather than by editing
+#      android/build.gradle.
+#   3. The locked win32 1.7.4 / ffi 0.1.3 fail to compile from Dart 2.13 ("Struct 'STATSTG' is
+#      empty", "Expected type 'T' to be a valid and instantiated subtype of 'NativeType'"), so the
+#      build uses Flutter 2.0.6 / Dart 2.12.4 — the version the lock's own sdks block was written
+#      for.
+#   4. AGP 3.5.0's stripReleaseDebugSymbols needs an NDK that still ships the legacy
+#      arm-linux-androideabi toolchain, which modern NDKs removed, so NDK r20 is installed and the
+#      runner's newer ones are moved out of the way.
 #
 # It lives on its own branch so it does not touch the app code on master.
 
@@ -14,27 +26,16 @@ on:
     branches: [build/original-apk]
   workflow_dispatch:
 
+env:
+  # Dart 2.12.4, matching the committed pubspec.lock (sdks: dart ">=2.12.0-0.0 <3.0.0").
+  FLUTTER_VERSION: "2.0.6"
+  # AGP 3.5.0 expects this revision's toolchain layout.
+  NDK_VERSION: "20.0.5594570"
+
 jobs:
   apk:
     runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        # The committed pubspec.lock was resolved for Dart 2.12 and pulls in win32 1.7.4 and ffi 0.1.3.
-        # Both declare `sdk: <3.0.0`, so pub resolves them on any Dart 2.x — but the compiler rejects
-        # them from Dart 2.13 onward ("Struct 'STATSTG' is empty", "Expected type 'T' to be a valid and
-        # instantiated subtype of 'NativeType'"). Flutter 2.5.3 (Dart 2.14) and 2.10.5 (Dart 2.16) both
-        # fail on exactly that, so the SDK has to be old enough to still accept those packages.
-        #
-        # 2.0.6 ships Dart 2.12.4, the version the lock was written against, and is the expected match.
-        # 2.2.3 (Dart 2.13.4) is built alongside it to bracket whether the restriction arrived in 2.13
-        # or 2.14.
-        include:
-          - flutter: "2.0.6"
-            extra_args: ""
-          - flutter: "2.2.3"
-            extra_args: ""
-    name: flutter ${{ matrix.flutter }}
+    name: flutter ${{ env.FLUTTER_VERSION }}
     steps:
       - name: Check out the original app, unmodified
         uses: actions/checkout@v4
@@ -48,48 +49,62 @@ jobs:
         run: |
           echo "revision: $(git rev-parse HEAD)"
           git log --oneline -1
-          echo "--- pubspec dependencies ---"
+          git status --porcelain
+          echo "--- declared dependencies ---"
           sed -n '/^dependencies:/,/^dev_dependencies:/p' pubspec.yaml
 
-      - name: Install the Android SDK packages this project targets
+      - name: Install the Android SDK packages, plus the NDK AGP 3.5.0 expects
         run: |
-          # Runs before setup-java, so it uses the image's default JDK, which the modern
-          # cmdline-tools require. Tolerated failure is fine: AGP 3.5.0 self-downloads any missing
-          # platform or build-tools revision, because the image already has the licences accepted.
+          # Runs before setup-java, so it uses the image's default JDK, which modern cmdline-tools
+          # require. Failures are tolerated: AGP 3.5.0 self-downloads missing platforms and
+          # build-tools because the image already has the licences accepted.
           SDKMANAGER=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1 || true)
           [ -n "$SDKMANAGER" ] || SDKMANAGER="$ANDROID_HOME/tools/bin/sdkmanager"
           echo "sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-          "$SDKMANAGER" "platforms;android-29" "platforms;android-28" "build-tools;28.0.3" "build-tools;29.0.3" "platform-tools" > /dev/null || true
-          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" || true
+          "$SDKMANAGER" "platforms;android-29" "platforms;android-28" \
+            "build-tools;28.0.3" "build-tools;29.0.3" "platform-tools" > /dev/null || true
+
+          # Move the runner's modern NDKs aside. AGP 3.5.0 picks the highest installed revision and
+          # then fails, because r23+ dropped the legacy toolchain directories.
+          mkdir -p /tmp/sdk-ndk-hidden
+          if [ -d "$ANDROID_HOME/ndk" ]; then mv "$ANDROID_HOME"/ndk/* /tmp/sdk-ndk-hidden/ 2>/dev/null || true; fi
+          if [ -d "$ANDROID_HOME/ndk-bundle" ]; then mv "$ANDROID_HOME/ndk-bundle" /tmp/sdk-ndk-hidden/ 2>/dev/null || true; fi
+          echo "hidden: $(ls /tmp/sdk-ndk-hidden 2>/dev/null | tr '\n' ' ')"
+
+          "$SDKMANAGER" "ndk;$NDK_VERSION" > /dev/null 2>&1 || true
+          if [ ! -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]; then
+            echo "sdkmanager did not provide r20, fetching the archive directly"
+            curl -fsSL -o /tmp/ndk.zip "https://dl.google.com/android/repository/android-ndk-r20-linux-x86_64.zip"
+            unzip -q /tmp/ndk.zip -d /tmp
+            mkdir -p "$ANDROID_HOME/ndk"
+            mv /tmp/android-ndk-r20 "$ANDROID_HOME/ndk/$NDK_VERSION"
+          fi
+
+          echo "--- NDKs now visible to AGP ---"
+          ls "$ANDROID_HOME/ndk" || true
+          echo "--- toolchain AGP is looking for ---"
+          ls "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains" | rg "arm-linux-androideabi" || echo "  MISSING"
 
       - name: Set up JDK 8
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          # Android Gradle Plugin 3.5.0 was built for JDK 8, and Gradle 5.6.2 will not run at all
-          # on JDK 17+. JDK 8 is the combination this project was written against.
+          # Android Gradle Plugin 3.5.0 was built for JDK 8 and Gradle 5.6.2 does not run on JDK 17+.
           java-version: "8"
 
-      - name: Install Flutter ${{ matrix.flutter }}
+      - name: Install Flutter ${{ env.FLUTTER_VERSION }}
         run: |
           curl -fsSL -o /tmp/flutter.tar.xz \
-            "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ matrix.flutter }}-stable.tar.xz"
+            "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
           tar xf /tmp/flutter.tar.xz -C "$HOME"
           echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
           git config --global --add safe.directory "$HOME/flutter"
 
       - name: Point Gradle at a mirror that still has the project's dependencies
         run: |
-          # The project's video_player 1.0.1 plugin depends on com.google.android.exoplayer:*:2.12.1.
-          # That revision only ever lived on JCenter, which is gone — Google's Maven starts at 2.13.3
-          # and Maven Central never carried it — so the build cannot resolve it from any repository
-          # the project declares. Aliyun's mirror of JCenter still serves the 2.12.1 archives, so it
-          # is added here.
-          #
-          # This is an environment-level repository injection via a Gradle init script: it goes in
-          # ~/.gradle/init.d and is deliberately NOT a change to android/build.gradle, so the app
-          # source and its declared dependencies stay exactly as the upstream repository has them.
+          # Environment-level repository injection. Deliberately not a change to the project's
+          # android/build.gradle, so its declared dependencies stay exactly as upstream has them.
           mkdir -p "$HOME/.gradle/init.d"
           cat > "$HOME/.gradle/init.d/jcenter-mirror.gradle" <<'EOF'
           gradle.projectsLoaded {
@@ -101,7 +116,6 @@ jobs:
               }
           }
           EOF
-          echo "--- init script ---"
           cat "$HOME/.gradle/init.d/jcenter-mirror.gradle"
           echo "--- proof the mirror serves the dead artifact ---"
           curl -sL -o /dev/null -w "exoplayer-core-2.12.1.aar -> %{http_code} (%{size_download} bytes)\n" \
@@ -113,14 +127,21 @@ jobs:
           flutter --version
           java -version
           flutter pub get
-          # shellcheck disable=SC2086
-          flutter build apk --release ${{ matrix.extra_args }}
+          flutter build apk --release
           echo "--- output ---"
           ls -la build/app/outputs/flutter-apk/
+
+      - name: Confirm the APK is a real, installable package
+        working-directory: src
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          ls -l "$APK" | awk '{printf "size: %.1f MB\n", $5/1048576}'
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 2>/dev/null | head -1)
+          "$AAPT" dump badging "$APK" | head -4
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
         with:
-          name: chatapp-original-flutter-${{ matrix.flutter }}
+          name: chatapp-original-flutter-${{ env.FLUTTER_VERSION }}
           path: src/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
