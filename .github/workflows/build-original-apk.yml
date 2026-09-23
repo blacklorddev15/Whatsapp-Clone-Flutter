@@ -1,0 +1,88 @@
+name: Build original APK
+
+# Builds an installable APK from DevStack06/Whatsapp-Clone-Flutter exactly as published.
+#
+# The app source is checked out from that repository and nothing in it is modified — no pubspec
+# edit, no manifest edit, no dependency change. This workflow exists only to supply a toolchain:
+# the project pins AGP 3.5.0 / Gradle 5.6.2 (2021), which will not run on a modern JDK, and no
+# Flutter or Android SDK is installed on the machine the request came from.
+#
+# It lives on its own branch so it does not touch the app code on master.
+
+on:
+  push:
+    branches: [build/original-apk]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Two SDK versions, because the project's committed pubspec.lock pins
+        # video_player_platform_interface 2.2.0, which calls BasicMessageChannel.setMockMessageHandler
+        # — an API that only exists from Flutter 2.10. 2.10.5 is therefore the expected match; 2.5.3
+        # is built alongside it in case the rest of the locked graph resolves better there.
+        flutter: ["2.10.5", "2.5.3"]
+    name: flutter ${{ matrix.flutter }}
+    steps:
+      - name: Check out the original app, unmodified
+        uses: actions/checkout@v4
+        with:
+          repository: DevStack06/Whatsapp-Clone-Flutter
+          ref: master
+          path: src
+
+      - name: Record exactly which revision is being built
+        working-directory: src
+        run: |
+          echo "revision: $(git rev-parse HEAD)"
+          git log --oneline -1
+          echo "--- pubspec dependencies ---"
+          sed -n '/^dependencies:/,/^dev_dependencies:/p' pubspec.yaml
+
+      - name: Install the Android SDK packages this project targets
+        run: |
+          # Runs before setup-java, so it uses the image's default JDK, which the modern
+          # cmdline-tools require. Tolerated failure is fine: AGP 3.5.0 self-downloads any missing
+          # platform or build-tools revision, because the image already has the licences accepted.
+          SDKMANAGER=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1 || true)
+          [ -n "$SDKMANAGER" ] || SDKMANAGER="$ANDROID_HOME/tools/bin/sdkmanager"
+          echo "sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-29" "build-tools;28.0.3" "build-tools;29.0.3" "platform-tools" > /dev/null || true
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" || true
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Android Gradle Plugin 3.5.0 was built for JDK 8, and Gradle 5.6.2 will not run at all
+          # on JDK 17+. JDK 8 is the combination this project was written against.
+          java-version: "8"
+
+      - name: Install Flutter ${{ matrix.flutter }}
+        run: |
+          curl -fsSL -o /tmp/flutter.tar.xz \
+            "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ matrix.flutter }}-stable.tar.xz"
+          tar xf /tmp/flutter.tar.xz -C "$HOME"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+          git config --global --add safe.directory "$HOME/flutter"
+
+      - name: Build the APK
+        working-directory: src
+        run: |
+          flutter --version
+          java -version
+          flutter pub get
+          flutter build apk --release
+          echo "--- output ---"
+          ls -la build/app/outputs/flutter-apk/
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatapp-original-flutter-${{ matrix.flutter }}
+          path: src/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
