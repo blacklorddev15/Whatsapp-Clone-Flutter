@@ -20,11 +20,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Two SDK versions, because the project's committed pubspec.lock pins
-        # video_player_platform_interface 2.2.0, which calls BasicMessageChannel.setMockMessageHandler
-        # — an API that only exists from Flutter 2.10. 2.10.5 is therefore the expected match; 2.5.3
-        # is built alongside it in case the rest of the locked graph resolves better there.
-        flutter: ["2.10.5", "2.5.3"]
+        # Two SDK versions. 2.5.3 is the one expected to build as the project stands: it only warns
+        # about the v1 Android embedding, where 2.10.5 and later turn it into a hard error. 2.10.5
+        # is built as well because the committed pubspec.lock pins video_player_platform_interface
+        # 2.2.0, which calls BasicMessageChannel.setMockMessageHandler — an API that only exists from
+        # Flutter 2.10 — so if 2.5.3 trips over that package, 2.10.5 can still get through, given the
+        # --ignore-deprecation its own error message points at.
+        include:
+          - flutter: "2.5.3"
+            extra_args: ""
+          - flutter: "2.10.5"
+            extra_args: "--ignore-deprecation"
     name: flutter ${{ matrix.flutter }}
     steps:
       - name: Check out the original app, unmodified
@@ -51,7 +57,7 @@ jobs:
           [ -n "$SDKMANAGER" ] || SDKMANAGER="$ANDROID_HOME/tools/bin/sdkmanager"
           echo "sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-          "$SDKMANAGER" "platforms;android-29" "build-tools;28.0.3" "build-tools;29.0.3" "platform-tools" > /dev/null || true
+          "$SDKMANAGER" "platforms;android-29" "platforms;android-28" "build-tools;28.0.3" "build-tools;29.0.3" "platform-tools" > /dev/null || true
           ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" || true
 
       - name: Set up JDK 8
@@ -70,13 +76,42 @@ jobs:
           echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
           git config --global --add safe.directory "$HOME/flutter"
 
+      - name: Point Gradle at a mirror that still has the project's dependencies
+        run: |
+          # The project's video_player 1.0.1 plugin depends on com.google.android.exoplayer:*:2.12.1.
+          # That revision only ever lived on JCenter, which is gone — Google's Maven starts at 2.13.3
+          # and Maven Central never carried it — so the build cannot resolve it from any repository
+          # the project declares. Aliyun's mirror of JCenter still serves the 2.12.1 archives, so it
+          # is added here.
+          #
+          # This is an environment-level repository injection via a Gradle init script: it goes in
+          # ~/.gradle/init.d and is deliberately NOT a change to android/build.gradle, so the app
+          # source and its declared dependencies stay exactly as the upstream repository has them.
+          mkdir -p "$HOME/.gradle/init.d"
+          cat > "$HOME/.gradle/init.d/jcenter-mirror.gradle" <<'EOF'
+          gradle.projectsLoaded {
+              gradle.rootProject.allprojects {
+                  repositories {
+                      maven { url 'https://maven.aliyun.com/repository/jcenter' }
+                      maven { url 'https://maven.aliyun.com/repository/public' }
+                  }
+              }
+          }
+          EOF
+          echo "--- init script ---"
+          cat "$HOME/.gradle/init.d/jcenter-mirror.gradle"
+          echo "--- proof the mirror serves the dead artifact ---"
+          curl -sL -o /dev/null -w "exoplayer-core-2.12.1.aar -> %{http_code} (%{size_download} bytes)\n" \
+            "https://maven.aliyun.com/repository/jcenter/com/google/android/exoplayer/exoplayer-core/2.12.1/exoplayer-core-2.12.1.aar"
+
       - name: Build the APK
         working-directory: src
         run: |
           flutter --version
           java -version
           flutter pub get
-          flutter build apk --release
+          # shellcheck disable=SC2086
+          flutter build apk --release ${{ matrix.extra_args }}
           echo "--- output ---"
           ls -la build/app/outputs/flutter-apk/
 
