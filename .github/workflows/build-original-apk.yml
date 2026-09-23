@@ -35,7 +35,7 @@ env:
 jobs:
   apk:
     runs-on: ubuntu-22.04
-    name: flutter ${{ env.FLUTTER_VERSION }}
+    name: build original apk
     steps:
       - name: Check out the original app, unmodified
         uses: actions/checkout@v4
@@ -93,7 +93,7 @@ jobs:
           # Android Gradle Plugin 3.5.0 was built for JDK 8 and Gradle 5.6.2 does not run on JDK 17+.
           java-version: "8"
 
-      - name: Install Flutter ${{ env.FLUTTER_VERSION }}
+      - name: Install Flutter 2.0.6
         run: |
           curl -fsSL -o /tmp/flutter.tar.xz \
             "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
@@ -142,6 +142,6 @@ jobs:
       - name: Upload the APK
         uses: actions/upload-artifact@v4
         with:
-          name: chatapp-original-flutter-${{ env.FLUTTER_VERSION }}
+          name: chatapp-original-flutter-2.0.6
           path: src/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
